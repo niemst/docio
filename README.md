@@ -58,7 +58,7 @@ Clean. Readable. Self-documenting through good names and types.
 
 For complex functionality, create `docs/src/myapp/billing.md`:
 
-```markdown
+````markdown
 # Billing System
 
 ## Tax Calculation Rules
@@ -71,7 +71,7 @@ Our tax system handles complex scenarios:
 
 ## Example: Complex Tax Scenario
 
-\`\`\`python
+```python
 # Restaurant order in California with mixed items
 items = [
     Item("burger", 10.00, tax_exempt=False),
@@ -81,10 +81,10 @@ items = [
 
 total = calculate_total(items, region="CA")
 # Applies: 7.25% sales tax + 5% alcohol tax + environmental fees
-\`\`\`
+```
 
 See [CA Tax Board Guidelines](https://example.com) for details.
-```
+````
 
 **This is valuable documentation.** It explains WHY, provides context, includes examples. Could even include diagrams/pictures etc.
 
@@ -130,16 +130,16 @@ class DataProcessor:
 
 Create `docs/src/myapp/DataProcessor.md`:
 
-```markdown
+````markdown
 # DataProcessor
 
 A data processor with comprehensive documentation.
 
 ## Quick Start
-\`\`\`python
+```python
 processor = DataProcessor(config={}, mode='fast')
 result = processor.process(data)
-\`\`\`
+```
 
 ## Configuration Options
 
@@ -150,7 +150,7 @@ result = processor.process(data)
 
 ## Architecture Diagrams
 [Include images, links, detailed examples...]
-```
+````
 
 Now `help()` shows the first paragraph, `show_doc()` shows the full Markdown.
 
@@ -568,7 +568,7 @@ def get_user(user_id: int) -> User:
 
 When you DO need documentation (complex algorithms, architectural decisions, API contracts), put it in Markdown:
 
-```markdown
+````markdown
 # User Authentication System
 
 ## Architecture
@@ -583,10 +583,10 @@ When you DO need documentation (complex algorithms, architectural decisions, API
 
 ## Examples
 
-\`\`\`python
+```python
 # Complex usage scenario with full context
-\`\`\`
 ```
+````
 
 This is **real documentation** that helps developers. Not boilerplate that restates the obvious.
 

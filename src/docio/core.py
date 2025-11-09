@@ -4,12 +4,16 @@ Core functionality for docio - decorator, registry, and documentation resolution
 
 import ast
 import inspect
+import logging
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Callable, TypeVar, Union, Optional, List, Tuple
 from functools import wraps
 
 from .exceptions import DocNotFoundError
+
+# Create logger for this module
+logger = logging.getLogger(__name__)
 
 # Type variable for generic decorator
 F = TypeVar('F', bound=Callable[..., Any])
@@ -30,8 +34,10 @@ def _get_package_root() -> Optional[Path]:
         pkg_dir = current_file.parent  # docio
         src_dir = pkg_dir.parent  # src
         root_dir = src_dir.parent  # project root
+        logger.debug(f"Package root: {root_dir}")
         return root_dir
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to determine package root: {e}", exc_info=True)
         return None
 
 
@@ -53,29 +59,45 @@ def _find_doc_file(obj: Any, filename: Optional[str] = None) -> Optional[Path]:
     # Get object metadata
     module = inspect.getmodule(obj)
     if not module:
+        logger.debug(f"Could not get module for {obj}")
         return None
 
     module_name = module.__name__
     qualname = getattr(obj, "__qualname__", getattr(obj, "__name__", None))
 
     if not qualname:
+        logger.debug(f"No qualname found for {obj}")
         return None
+
+    logger.debug(f"Looking for docs: module={module_name}, qualname={qualname}")
 
     root = _get_package_root()
     if not root:
+        logger.debug("Could not determine package root")
         return None
 
     # If explicit filename provided, use it directly under docs/
     if filename:
         # Explicit filename is relative to docs/
         candidate = root / "docs" / filename
+        logger.debug(f"Checking explicit filename: {candidate}")
         if candidate.exists():
+            logger.info(f"Found doc file via explicit filename: {candidate}")
             return candidate
+        logger.debug(f"Explicit filename not found: {candidate}")
         return None
 
     # Determine source location to mirror in docs/
     try:
-        source_file = Path(inspect.getfile(module))
+        # Special handling for __main__ module
+        if module.__name__ == '__main__':
+            # Try to get the actual file path
+            if hasattr(module, '__file__') and module.__file__:
+                source_file = Path(module.__file__).resolve()
+            else:
+                return None
+        else:
+            source_file = Path(inspect.getfile(module))
         source_relative = source_file.relative_to(root)
 
         # Check if file is under src/, tests/, or examples/
@@ -92,7 +114,11 @@ def _find_doc_file(obj: Any, filename: Optional[str] = None) -> Optional[Path]:
         else:
             # Fallback for files not in src/tests/examples
             base_dir = ""
-            module_path = module_name.replace(".", "/")
+            # For __main__ module, use the source file name instead of module name
+            if module_name == '__main__':
+                module_path = source_relative.stem
+            else:
+                module_path = module_name.replace(".", "/")
     except (ValueError, OSError):
         # If we can't determine source location, fall back to module name
         base_dir = ""
@@ -118,21 +144,25 @@ def _find_doc_file(obj: Any, filename: Optional[str] = None) -> Optional[Path]:
     if module_path:
         for fname in doc_filename_candidates:
             candidate = search_base / module_path / fname
+            logger.debug(f"Checking candidate: {candidate}")
             if candidate.exists():
+                logger.info(f"Found doc file: {candidate}")
                 return candidate
 
     # Try without module path (flat structure under base_dir)
     for fname in doc_filename_candidates:
         candidate = search_base / fname
+        logger.debug(f"Checking flat candidate: {candidate}")
         if candidate.exists():
+            logger.info(f"Found doc file: {candidate}")
             return candidate
 
+    logger.debug(f"No doc file found for {qualname}")
     return None
 
 
 def get_doc(obj: Any, filename: Optional[str] = None) -> str:
-    """
-    Get the documentation content for an object.
+    """Retrieve the documentation content for a Python object.
 
     Args:
         obj: The object to get documentation for
@@ -150,14 +180,19 @@ def get_doc(obj: Any, filename: Optional[str] = None) -> str:
         # Return original docstring if available
         original_doc = inspect.getdoc(obj)
         if original_doc:
+            logger.debug(f"Using original docstring for {obj}")
             return original_doc
+        logger.warning(f"No documentation file found for {obj!r}")
         raise DocNotFoundError(
             f"No documentation file found for {obj!r}"
         )
 
     try:
-        return doc_path.read_text(encoding="utf-8")
+        content = doc_path.read_text(encoding="utf-8")
+        logger.debug(f"Successfully read doc file: {doc_path}")
+        return content
     except Exception as e:
+        logger.error(f"Failed to read documentation file {doc_path}: {e}")
         raise DocNotFoundError(
             f"Failed to read documentation file {doc_path}: {e}"
         )
@@ -168,26 +203,11 @@ def docio(
     *,
     filename: Optional[str] = None,
 ) -> Union[F, Callable[[F], F]]:
-    """
-    Decorator to replace docstrings with external Markdown documentation.
-
-    Usage:
-        @docio
-        class MyClass:
-            pass
-
-        @docio(filename="custom/path.md")
-        def my_function():
-            pass
-
-    Args:
-        obj: The object to decorate (when used without parentheses)
-        filename: Optional path to documentation file (relative to docs root)
-
-    Returns:
-        Decorated object with injected __doc__
-    """
+    """Decorator to replace Python docstrings with external Markdown documentation."""
     def decorator(o: F) -> F:
+        obj_name = getattr(o, "__qualname__", getattr(o, "__name__", str(o)))
+        logger.debug(f"Applying @docio to {obj_name}")
+
         # Register the object
         _DOCIO_REGISTRY.append((o, filename))
 
@@ -196,9 +216,20 @@ def docio(
             doc_content = get_doc(o, filename)
             # Set the full doc (for show_doc)
             o.__docio_full__ = doc_content
+            logger.debug(f"Successfully loaded documentation for {obj_name}")
+
+            # Strip YAML frontmatter if present (content between --- markers)
+            content_for_extraction = doc_content
+            if content_for_extraction.startswith('---'):
+                # Find the closing --- marker
+                parts = content_for_extraction.split('---', 2)
+                if len(parts) >= 3:
+                    # Skip the frontmatter and use the rest
+                    content_for_extraction = parts[2].strip()
+
             # Extract first meaningful paragraph for help()
             # Skip title/heading lines and get the first real paragraph
-            paragraphs = [p.strip() for p in doc_content.split('\n\n') if p.strip()]
+            paragraphs = [p.strip() for p in content_for_extraction.split('\n\n') if p.strip()]
             first_para = ""
             for para in paragraphs:
                 # Skip markdown headings
@@ -212,8 +243,14 @@ def docio(
             if len(first_para) > 200:
                 first_para = first_para[:197] + "..."
             o.__doc__ = first_para if first_para else f"See documentation for {getattr(o, '__qualname__', o.__name__)}"
-        except DocNotFoundError:
+        except DocNotFoundError as e:
             # Keep original docstring or set minimal one
+            logger.warning(f"Documentation not found for {obj_name}: {e}")
+            if not o.__doc__:
+                o.__doc__ = f"Documentation pending for {getattr(o, '__qualname__', o.__name__)}"
+        except Exception as e:
+            # Log any unexpected errors
+            logger.error(f"Unexpected error loading documentation for {obj_name}: {e}", exc_info=True)
             if not o.__doc__:
                 o.__doc__ = f"Documentation pending for {getattr(o, '__qualname__', o.__name__)}"
 
@@ -227,8 +264,7 @@ def docio(
 
 
 def validate_docs(strict: bool = True) -> list[tuple[Any, Optional[str]]]:
-    """
-    Validate that all registered @docio objects have documentation files.
+    """Validate that all `@docio` decorated objects have documentation files.
 
     Args:
         strict: If True, raise AssertionError on missing docs
@@ -261,9 +297,7 @@ def validate_docs(strict: bool = True) -> list[tuple[Any, Optional[str]]]:
 
     return missing
 
-
 def show_doc(obj: Any) -> str:
-    """Display the full Markdown documentation for an object."""
     # Try to get from cached full doc first
     if hasattr(obj, '__docio_full__'):
         return obj.__docio_full__
@@ -285,12 +319,14 @@ def scan_file_for_docio(file_path: Union[str, Path]) -> List[Tuple[str, Optional
     """
     file_path = Path(file_path)
     if not file_path.exists():
+        logger.debug(f"File does not exist: {file_path}")
         return []
 
     try:
         content = file_path.read_text(encoding='utf-8')
         tree = ast.parse(content, filename=str(file_path))
-    except Exception:
+    except Exception as e:
+        logger.error(f"Failed to parse {file_path}: {e}", exc_info=True)
         return []
 
     # Check if this is a test file

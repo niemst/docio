@@ -1,0 +1,4 @@
+- support for url / uri as doc source
+- different then .md file types
+- autogeneration and validation of documentation with LLMs
+- plugins for VS Code / PyCharm to set and manage documentation with docio

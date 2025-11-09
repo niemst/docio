@@ -8,10 +8,9 @@ version = "0.1.0"
 description = "Replace Python docstrings with external Markdown documentation files"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "Custom License – Based on Creative Commons BY-NC-ND 4.0"}
-license-files = ["LICENSE"]
+license = { file = "LICENSE", text = "Custom License – Based on Creative Commons BY-NC-ND 4.0" }
 authors = [
-    {name = "Niemst", email = "niemst+docio@gmail.com"}
+    { name = "Niemst", email = "niemst+docio@gmail.com" }
 ]
 keywords = ["documentation", "markdown", "docstring", "docs"]
 classifiers = [
@@ -47,7 +46,7 @@ Repository = "https://github.com/niemst/docio"
 Issues = "https://github.com/niemst/docio/issues"
 
 [tool.setuptools]
-package-dir = {"" = "src"}
+package-dir = { "" = "src" }
 include-package-data = true
 
 [tool.setuptools.packages.find]
@@ -80,6 +79,7 @@ strict_optional = true
 
 [dependency-groups]
 dev = [
+    "justfile>=0.0.1a0",
     "mypy>=1.18.2",
     "pytest>=9.0.0",
     "pytest-cov>=7.0.0",
@@ -97,10 +97,10 @@ auto_generate_stubs = true
 
 # Exclude patterns - files matching these glob patterns will be skipped
 exclude = [
-    "*/migrations/*",     # Exclude migration directories anywhere
-    "generated/*",        # Exclude generated directory at root
-    "*_pb2.py",          # Exclude protobuf generated files
-    "*_pb2_grpc.py",     # Exclude gRPC generated files
+    "*/migrations/*", # Exclude migration directories anywhere
+    "generated/*", # Exclude generated directory at root
+    "*_pb2.py", # Exclude protobuf generated files
+    "*_pb2_grpc.py", # Exclude gRPC generated files
 ]
 
 # Include patterns (optional) - if specified, only files matching these patterns are processed
