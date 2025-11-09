@@ -1,0 +1,111 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "docio"
+version = "0.1.0"
+description = "Replace Python docstrings with external Markdown documentation files"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "Custom License – Based on Creative Commons BY-NC-ND 4.0"}
+license-files = ["LICENSE"]
+authors = [
+    {name = "Niemst", email = "niemst+docio@gmail.com"}
+]
+keywords = ["documentation", "markdown", "docstring", "docs"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: Other/Proprietary License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Documentation",
+    "Topic :: Software Development :: Documentation",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "pytest-cov>=4.1.0",
+    "ruff>=0.1.0",
+    "mypy>=1.5.0",
+]
+
+[project.scripts]
+docio = "docio.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/niemst/docio"
+Documentation = "https://github.com/niemst/docio#readme"
+Repository = "https://github.com/niemst/docio"
+Issues = "https://github.com/niemst/docio/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+docio = ["py.typed", "stubs/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=docio --cov-report=term-missing"
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+strict_optional = true
+
+[dependency-groups]
+dev = [
+    "mypy>=1.18.2",
+    "pytest>=9.0.0",
+    "pytest-cov>=7.0.0",
+    "ruff>=0.14.4",
+]
+
+[tool.docio]
+# Auto-generate documentation stubs for missing docs
+auto_generate_stubs = true
+
+# Custom template directory (optional)
+# Point to a directory containing: class.md, function.md, method.md, ...
+# If not specified, uses built-in templates from docio/stubs/
+# template_dir = "path/to/your/custom/templates"
+
+# Exclude patterns - files matching these glob patterns will be skipped
+exclude = [
+    "*/migrations/*",     # Exclude migration directories anywhere
+    "generated/*",        # Exclude generated directory at root
+    "*_pb2.py",          # Exclude protobuf generated files
+    "*_pb2_grpc.py",     # Exclude gRPC generated files
+]
+
+# Include patterns (optional) - if specified, only files matching these patterns are processed
+# If not specified or empty, all files (except excluded) are processed
+# include = [
+#     "src/**/*.py",
+#     "tests/**/*.py",
+# ]
