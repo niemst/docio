@@ -654,7 +654,15 @@ No! The point is to **stop writing boilerplate entirely**. Only create `.md` fil
 
 ### Q: What about IDEs showing docstrings?
 
-The first paragraph of your Markdown automatically becomes the docstring, so IDEs show it. But more importantly: if your function needs an IDE tooltip to be understood, maybe it needs a better name or simpler design.
+The `@docio` decorator automatically creates a **clickable reStructuredText link** in the docstring that opens the full .md documentation. When you hover over a function in PyCharm, VS Code, or other IDEs, you'll see:
+
+```
+Advanced pathfinding algorithm... <docs/check_experience/optimized_dijkstra_pathfinding.md>
+```
+
+Click the link to instantly open the full documentation! This provides IDE hover support while keeping your source code completely clean.
+
+**Note:** The link is created at runtime when the decorator executes. For static type checkers, the decorator preserves type hints in your function signatures.
 
 ### Q: Does this work with type checkers?
 

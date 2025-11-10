@@ -5,6 +5,7 @@ Core functionality for docio - decorator, registry, and documentation resolution
 import ast
 import inspect
 import logging
+import os
 from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any, Callable, TypeVar, Union, Optional, List, Tuple
@@ -162,18 +163,7 @@ def _find_doc_file(obj: Any, filename: Optional[str] = None) -> Optional[Path]:
 
 
 def get_doc(obj: Any, filename: Optional[str] = None) -> str:
-    """Retrieve the documentation content for a Python object.
-
-    Args:
-        obj: The object to get documentation for
-        filename: Optional explicit filename override
-
-    Returns:
-        Documentation content as a string
-
-    Raises:
-        DocNotFoundError: If documentation file cannot be found
-    """
+    """../../docs/src/docio/core/get_doc.md"""
     doc_path = _find_doc_file(obj, filename)
 
     if doc_path is None:
@@ -198,12 +188,103 @@ def get_doc(obj: Any, filename: Optional[str] = None) -> str:
         )
 
 
+def _inject_docstring_to_source(obj: Any, doc_link: str) -> bool:
+    """
+    Write the doc link as a docstring back to the source file.
+
+    Args:
+        obj: The decorated object
+        doc_link: The link to .md file (e.g., "file:///path/to/docs.md")
+
+    Returns:
+        True if successful, False otherwise
+    """
+    try:
+        # Get source file
+        module = inspect.getmodule(obj)
+        if not module or not hasattr(module, '__file__') or not module.__file__:
+            logger.debug(f"Cannot inject docstring: no module file for {obj}")
+            return False
+
+        source_file = Path(module.__file__).resolve()
+        if not source_file.exists():
+            return False
+
+        # Get object source line using inspect
+        try:
+            source_lines, start_line = inspect.getsourcelines(obj)
+        except (OSError, TypeError):
+            logger.debug(f"Cannot get source lines for {obj}")
+            return False
+
+        # Read entire source file
+        all_lines = source_file.read_text(encoding='utf-8').split('\n')
+
+        # Find where the docstring should go (right after the signature)
+        # Start from the function/class definition line
+        obj_start_idx = start_line - 1  # Convert to 0-indexed
+
+        # Find the end of the signature (line ending with :)
+        sig_end_idx = obj_start_idx
+        for i in range(obj_start_idx, min(obj_start_idx + 20, len(all_lines))):
+            if all_lines[i].rstrip().endswith(':'):
+                sig_end_idx = i
+                break
+
+        # Check the line right after signature
+        docstring_line_idx = sig_end_idx + 1
+        if docstring_line_idx >= len(all_lines):
+            return False
+
+        # Get the indentation from the first line of the function body
+        next_line = all_lines[docstring_line_idx]
+        # Calculate indent (should be function indent + 4)
+        def_line = all_lines[obj_start_idx]
+        base_indent = len(def_line) - len(def_line.lstrip())
+        indent_str = ' ' * (base_indent + 4)
+
+        # Check if there's already a docstring with .md link
+        next_line_stripped = next_line.strip()
+        if next_line_stripped.startswith('"""') and '.md' in next_line_stripped:
+            logger.debug(f"Docstring already exists for {obj.__name__}")
+            return False
+
+        # Check if there's an existing docstring to replace
+        if next_line_stripped.startswith('"""') or next_line_stripped.startswith("'''"):
+            # Remove old docstring
+            quote = '"""' if next_line_stripped.startswith('"""') else "'''"
+            # Single-line docstring
+            if next_line_stripped.endswith(quote) and len(next_line_stripped) > 6:
+                all_lines[docstring_line_idx] = f'{indent_str}"""{doc_link}"""'
+            else:
+                # Multi-line docstring - find end and replace entire block
+                end_idx = docstring_line_idx + 1
+                while end_idx < len(all_lines):
+                    if quote in all_lines[end_idx]:
+                        # Replace entire docstring block with single line
+                        all_lines[docstring_line_idx:end_idx+1] = [f'{indent_str}"""{doc_link}"""']
+                        break
+                    end_idx += 1
+        else:
+            # Insert new docstring
+            all_lines.insert(docstring_line_idx, f'{indent_str}"""{doc_link}"""')
+
+        # Write back
+        source_file.write_text('\n'.join(all_lines), encoding='utf-8')
+        logger.info(f"Injected docstring link to {source_file}")
+        return True
+
+    except Exception as e:
+        logger.debug(f"Failed to inject docstring to source: {e}", exc_info=True)
+        return False
+
+
 def docio(
     obj: Optional[F] = None,
     *,
     filename: Optional[str] = None,
 ) -> Union[F, Callable[[F], F]]:
-    """Decorator to replace Python docstrings with external Markdown documentation."""
+    """../../docs/src/docio/core/docio.md"""
     def decorator(o: F) -> F:
         obj_name = getattr(o, "__qualname__", getattr(o, "__name__", str(o)))
         logger.debug(f"Applying @docio to {obj_name}")
@@ -242,7 +323,39 @@ def docio(
             # Limit length
             if len(first_para) > 200:
                 first_para = first_para[:197] + "..."
-            o.__doc__ = first_para if first_para else f"See documentation for {getattr(o, '__qualname__', o.__name__)}"
+
+            # Try to inject doc link to source file for IDE support
+            doc_file_path = _find_doc_file(o, filename)
+            if doc_file_path:
+                try:
+                    # Get source file location
+                    module = inspect.getmodule(o)
+                    if module and hasattr(module, '__file__') and module.__file__:
+                        source_file = Path(module.__file__).resolve()
+                        # Calculate relative path from source to docs
+                        rel_path = os.path.relpath(doc_file_path, source_file.parent)
+                        # Normalize path separators for cross-platform
+                        rel_path = rel_path.replace('\\', '/')
+                        # Add ./ prefix and file:// scheme for IDE clickability
+                        doc_link = f"file://./{rel_path}"
+
+                        # Set runtime docstring (for help())
+                        o.__doc__ = doc_link
+
+                        # Inject docstring to source file (for IDE hover)
+                        _inject_docstring_to_source(o, doc_link)
+
+                        logger.debug(f"Set doc link to {rel_path}")
+                    else:
+                        # Fallback if can't get source file
+                        o.__doc__ = first_para if first_para else f"See documentation for {getattr(o, '__qualname__', o.__name__)}"
+                except (ValueError, OSError) as e:
+                    # Fallback if can't calculate relative path
+                    logger.debug(f"Could not create relative path link: {e}")
+                    o.__doc__ = first_para if first_para else f"See documentation for {getattr(o, '__qualname__', o.__name__)}"
+            else:
+                o.__doc__ = first_para if first_para else f"See documentation for {getattr(o, '__qualname__', o.__name__)}"
+
         except DocNotFoundError as e:
             # Keep original docstring or set minimal one
             logger.warning(f"Documentation not found for {obj_name}: {e}")
@@ -264,17 +377,7 @@ def docio(
 
 
 def validate_docs(strict: bool = True) -> list[tuple[Any, Optional[str]]]:
-    """Validate that all `@docio` decorated objects have documentation files.
-
-    Args:
-        strict: If True, raise AssertionError on missing docs
-
-    Returns:
-        List of (object, filename) tuples for objects missing docs
-
-    Raises:
-        AssertionError: If strict=True and any docs are missing
-    """
+    """../../docs/src/docio/core/validate_docs.md"""
     missing = []
 
     for obj, fname in _DOCIO_REGISTRY:
@@ -298,6 +401,7 @@ def validate_docs(strict: bool = True) -> list[tuple[Any, Optional[str]]]:
     return missing
 
 def show_doc(obj: Any) -> str:
+    """file://../../docs/src/docio/core/show_doc.md"""
     # Try to get from cached full doc first
     if hasattr(obj, '__docio_full__'):
         return obj.__docio_full__
@@ -307,16 +411,7 @@ def show_doc(obj: Any) -> str:
 
 
 def scan_file_for_docio(file_path: Union[str, Path]) -> List[Tuple[str, Optional[str], int, str]]:
-    """
-    Scan a Python file for @docio decorated classes and functions.
-
-    Args:
-        file_path: Path to Python file to scan
-
-    Returns:
-        List of tuples: (qualified_name, filename_override, line_number, object_type)
-        where object_type is one of: 'class', 'function', 'method', 'test'
-    """
+    """../../docs/src/docio/core/show_doc.md"""
     file_path = Path(file_path)
     if not file_path.exists():
         logger.debug(f"File does not exist: {file_path}")

@@ -3,9 +3,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 
-# Auto-generated stub files
-*.pyi
-
 # C extensions
 *.so
 

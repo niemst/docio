@@ -16,12 +16,11 @@ from docio import docio
 
 @docio
 def optimized_dijkstra_pathfinding(
-    graph: dict,
+    """docs/check_experience/optimized_dijkstra_pathfinding.md"""
     start: str,
     end: str,
     heuristic_weight: float = 1.0
 ) -> tuple[list[str], float]:
-    """<a href=file://./docs/check_experience/optimized_dijkstra_pathfinding.md>test</a>"""
     # Placeholder implementation - in reality this would be the algorithm
     return ([start, end], 0.0)
 
